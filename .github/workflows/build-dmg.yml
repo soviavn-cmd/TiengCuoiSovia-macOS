@@ -2,12 +2,14 @@ name: Build macOS DMG
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -23,9 +25,9 @@ jobs:
             arch: x64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -39,6 +41,14 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o "$RUNNER_TEMP/publish"
 
+      - name: Build native macOS audio helper
+        run: |
+          swiftc native/SoviaAudioPlayer.swift \
+            -target "${{ matrix.arch == 'arm64' && 'arm64-apple-macosx11.0' || 'x86_64-apple-macosx11.0' }}" \
+            -swift-version 5 \
+            -framework AVFoundation \
+            -o "$RUNNER_TEMP/publish/SoviaAudioPlayer"
+
       - name: Create app bundle and icon
         shell: bash
         run: |
@@ -47,6 +57,7 @@ jobs:
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp -R "$RUNNER_TEMP/publish/." "$APP/Contents/MacOS/"
           chmod +x "$APP/Contents/MacOS/TiengCuoiSovia"
+          chmod +x "$APP/Contents/MacOS/SoviaAudioPlayer"
 
           ICONSET="$RUNNER_TEMP/Sovia.iconset"
           mkdir -p "$ICONSET"
@@ -57,15 +68,16 @@ jobs:
           done
           iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Sovia.icns"
 
-          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          APP_VERSION=$(dotnet msbuild TiengCuoiSoviaMac.csproj -getProperty:Version -nologo)
+          cat > "$APP/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleName</key><string>Tiếng Cười Sovia</string>
             <key>CFBundleDisplayName</key><string>Tiếng Cười Sovia</string>
             <key>CFBundleIdentifier</key><string>vn.sovia.tiengcuoi</string>
-            <key>CFBundleVersion</key><string>1.0.0</string>
-            <key>CFBundleShortVersionString</key><string>1.0.0</string>
+            <key>CFBundleVersion</key><string>${APP_VERSION}</string>
+            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
             <key>CFBundleExecutable</key><string>TiengCuoiSovia</string>
             <key>CFBundleIconFile</key><string>Sovia</string>
             <key>CFBundlePackageType</key><string>APPL</string>
@@ -80,15 +92,34 @@ jobs:
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
           hdiutil create -volname "Tiếng Cười Sovia" -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
 
+      - name: Test mounted DMG, app launch, and all audio files
+        run: bash scripts/test-macos-bundle.sh "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
+
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TiengCuoiSovia-macOS-${{ matrix.arch }}
           path: TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg
           compression-level: 0
 
-      - name: Attach DMG to tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
         with:
-          files: TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg
+          pattern: TiengCuoiSovia-macOS-*
+          merge-multiple: true
+      - name: Create release and upload both DMGs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" ./*.dmg --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" ./*.dmg --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" --generate-notes
+          fi
