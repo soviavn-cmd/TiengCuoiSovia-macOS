@@ -23,9 +23,9 @@ jobs:
             arch: x64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -80,15 +80,32 @@ jobs:
           ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
           hdiutil create -volname "Tiếng Cười Sovia" -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
 
+      - name: Test mounted DMG, app launch, and all audio files
+        run: bash scripts/test-macos-bundle.sh "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
+
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: TiengCuoiSovia-macOS-${{ matrix.arch }}
           path: TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg
           compression-level: 0
 
-      - name: Attach DMG to tagged release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
         with:
-          files: TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg
+          pattern: TiengCuoiSovia-macOS-*
+          merge-multiple: true
+      - name: Create release and upload both DMGs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" ./*.dmg --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" ./*.dmg --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" --generate-notes
+          fi

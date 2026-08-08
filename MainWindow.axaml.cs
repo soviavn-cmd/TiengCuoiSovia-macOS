@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private SoundItem? _current;
     private string _category = "Effect 1";
     private bool _editMode;
+    private bool _volumeDragging;
 
     public MainWindow()
     {
@@ -26,7 +27,7 @@ public partial class MainWindow : Window
         Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://TiengCuoiSovia/Assets/Sovia.ico")));
         _settings = _settingsService.Load();
         SoundItems.ItemsSource = _visible;
-        VolumeSlider.Value = _settings.Volume;
+        VolumeHost.SizeChanged += (_, _) => UpdateVolumeVisual(_settings.Volume);
         AlwaysOnTopToggle.IsChecked = _settings.AlwaysOnTop;
         AlwaysOnTopToggle.IsCheckedChanged += AlwaysOnTop_Changed;
         EditToggle.IsCheckedChanged += EditToggle_Changed;
@@ -142,7 +143,24 @@ public partial class MainWindow : Window
     private void Stop_Click(object? sender, RoutedEventArgs e) => Stop();
     private void EditToggle_Changed(object? sender, RoutedEventArgs e) { _editMode = EditToggle.IsChecked == true; StatusText.Text = _editMode ? "EDIT: chọn nút để đổi tên hoặc file MP3." : $"Đã tải {_all.Count} hiệu ứng từ Sovia."; }
     private void AlwaysOnTop_Changed(object? sender, RoutedEventArgs e) { Topmost = AlwaysOnTopToggle.IsChecked == true; _settings.AlwaysOnTop = Topmost; }
-    private void VolumeSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e) { if (VolumeText is null) return; VolumeText.Text = $"{e.NewValue:0}"; _audio.Volume = e.NewValue; _settings.Volume = e.NewValue; }
+    private void Volume_PointerPressed(object? sender, PointerPressedEventArgs e) { _volumeDragging = true; e.Pointer.Capture(VolumeHost); SetVolumeFromPointer(e); }
+    private void Volume_PointerMoved(object? sender, PointerEventArgs e) { if (_volumeDragging) SetVolumeFromPointer(e); }
+    private void Volume_PointerReleased(object? sender, PointerReleasedEventArgs e) { if (!_volumeDragging) return; SetVolumeFromPointer(e); _volumeDragging = false; e.Pointer.Capture(null); _settingsService.Save(_settings); }
+    private void SetVolumeFromPointer(PointerEventArgs e)
+    {
+        var width = Math.Max(1, VolumeHost.Bounds.Width);
+        var value = Math.Clamp(e.GetPosition(VolumeHost).X / width * 100d, 0, 100);
+        _settings.Volume = value; _audio.Volume = value; VolumeText.Text = $"{value:0}"; UpdateVolumeVisual(value);
+    }
+    private void UpdateVolumeVisual(double value)
+    {
+        var width = Math.Max(1, VolumeHost.Bounds.Width);
+        var x = Math.Clamp(width * value / 100d, 0, width);
+        VolumeFill.Width = x;
+        Canvas.SetLeft(VolumeThumb, Math.Clamp(x - 9.5, 0, Math.Max(0, width - 19)));
+        Canvas.SetLeft(VolumeThumbCenter, Math.Clamp(x - 3.5, 6, Math.Max(6, width - 13)));
+        VolumeText.Text = $"{value:0}";
+    }
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e) { if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e); }
     private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();

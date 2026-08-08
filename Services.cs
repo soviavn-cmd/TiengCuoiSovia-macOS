@@ -40,9 +40,11 @@ public sealed class AudioService : IDisposable
 public sealed class SettingsService
 {
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
-    public string DataFolder { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TiengCuoiSovia");
+    public string DataFolder { get; }
     public string CustomMediaFolder => Path.Combine(DataFolder, "CustomMedia");
     private string FilePath => Path.Combine(DataFolder, "settings.json");
+
+    public SettingsService(string? dataFolder = null) => DataFolder = dataFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TiengCuoiSovia");
 
     public AppSettings Load()
     {
