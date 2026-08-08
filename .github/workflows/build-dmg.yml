@@ -68,15 +68,16 @@ jobs:
           done
           iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Sovia.icns"
 
-          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          APP_VERSION=$(dotnet msbuild TiengCuoiSoviaMac.csproj -getProperty:Version -nologo)
+          cat > "$APP/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleName</key><string>Tiếng Cười Sovia</string>
             <key>CFBundleDisplayName</key><string>Tiếng Cười Sovia</string>
             <key>CFBundleIdentifier</key><string>vn.sovia.tiengcuoi</string>
-            <key>CFBundleVersion</key><string>1.0.0</string>
-            <key>CFBundleShortVersionString</key><string>1.0.0</string>
+            <key>CFBundleVersion</key><string>${APP_VERSION}</string>
+            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
             <key>CFBundleExecutable</key><string>TiengCuoiSovia</string>
             <key>CFBundleIconFile</key><string>Sovia</string>
             <key>CFBundlePackageType</key><string>APPL</string>

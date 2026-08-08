@@ -7,6 +7,7 @@ MOUNT_POINT="${RUNNER_TEMP:-/tmp}/sovia-mount"
 APP="$MOUNT_POINT/Tieng Cuoi Sovia.app"
 LOG_FILE="${RUNNER_TEMP:-/tmp}/sovia-launch.log"
 REQUIRED_CLEAN_ROUNDS=20
+EXPECTED_VERSION=$(dotnet msbuild TiengCuoiSoviaMac.csproj -getProperty:Version -nologo)
 
 cleanup() {
   if [[ -n "${APP_PID:-}" ]] && kill -0 "$APP_PID" 2>/dev/null; then
@@ -35,6 +36,7 @@ for ROUND in $(seq 1 "$REQUIRED_CLEAN_ROUNDS"); do
   test -x "$APP/Contents/MacOS/TiengCuoiSovia"
   test -x "$APP/Contents/MacOS/SoviaAudioPlayer"
   plutil -lint "$APP/Contents/Info.plist" >/dev/null
+  [[ "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")" == "$EXPECTED_VERSION" ]]
   codesign --verify --deep --strict "$APP"
 
   MEDIA_ROOT="$APP/Contents/MacOS/Media"
