@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:TiengCuoiSoviaMac"
+        x:Class="TiengCuoiSoviaMac.MainWindow"
+        Title="Tiếng Cười Sovia" Width="342" Height="680"
+        MinWidth="342" MaxWidth="342" MinHeight="540"
+        CanResize="False" WindowDecorations="None"
+        Background="Transparent" TransparencyLevelHint="Transparent"
+        ExtendClientAreaToDecorationsHint="True">
+  <Window.Styles>
+    <Style Selector="Button.top">
+      <Setter Property="Height" Value="27"/><Setter Property="Margin" Value="2"/><Setter Property="Padding" Value="5,0"/>
+      <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#111529"/>
+      <Setter Property="BorderBrush" Value="#25CDE9"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="9"/><Setter Property="FontSize" Value="9"/><Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="Button.top:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="#24304B"/></Style>
+    <Style Selector="Button.sound">
+      <Setter Property="Height" Value="38"/><Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="7,2"/>
+      <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#111528"/>
+      <Setter Property="BorderBrush" Value="#657294"/><Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="9"/><Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="Button.sound:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="#202943"/></Style>
+    <Style Selector="Button.title"><Setter Property="Width" Value="34"/><Setter Property="Height" Value="30"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Foreground" Value="#DCE5F5"/><Setter Property="FontSize" Value="16"/></Style>
+  </Window.Styles>
+
+  <Border Background="#080B18" BorderBrush="#34405A" BorderThickness="1" CornerRadius="17" ClipToBounds="True">
+    <Grid RowDefinitions="32,42,38,1,*,22">
+      <Border Grid.Row="0" Background="#0D1120" BorderBrush="#252E43" BorderThickness="0,0,0,1" CornerRadius="16,16,0,0" PointerPressed="TitleBar_PointerPressed">
+        <Grid Margin="7,0,3,0" ColumnDefinitions="Auto,*,Auto,Auto">
+          <Image Source="avares://TiengCuoiSovia/Assets/Sovia.png" Width="20" Height="20" Margin="0,0,7,0"/>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="TIẾNG CƯỜI" Foreground="White" FontSize="11" FontWeight="SemiBold"/>
+            <TextBlock Text=" SOVIA" Foreground="#25F4EE" FontSize="11" FontWeight="Bold"/>
+          </StackPanel>
+          <Button Grid.Column="2" Classes="title" Content="—" Click="Minimize_Click"/>
+          <Button Grid.Column="3" Classes="title" Content="×" Click="Close_Click"/>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" Margin="8,5,8,2" ColumnDefinitions="108,54,*,30">
+        <Grid>
+          <ToggleSwitch x:Name="AlwaysOnTopToggle" Width="40" HorizontalAlignment="Left" OnContent="" OffContent=""/>
+          <TextBlock Text="Luôn Hiện" Foreground="White" FontSize="11" Margin="47,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+        </Grid>
+        <TextBlock Grid.Column="1" Text="ÂM LƯỢNG" Foreground="#8C99B2" FontWeight="Bold" FontSize="8" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+        <Slider x:Name="VolumeSlider" Grid.Column="2" Minimum="0" Maximum="100" Margin="8,0" VerticalAlignment="Center" ValueChanged="VolumeSlider_ValueChanged"/>
+        <TextBlock x:Name="VolumeText" Grid.Column="3" Text="75" Foreground="White" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+      </Grid>
+
+      <Grid Grid.Row="2" Margin="5,1,5,6" ColumnDefinitions="*,*,*,*,*,*">
+        <Button x:Name="Effect1Button" Grid.Column="0" Classes="top" Content="EFFECT1" Tag="Effect 1" Click="Category_Click" Background="#FE2C95"/>
+        <Button x:Name="Effect2Button" Grid.Column="1" Classes="top" Content="EFFECT2" Tag="Effect 2" Click="Category_Click"/>
+        <Button x:Name="Music1Button" Grid.Column="2" Classes="top" Content="MUSIC1" Tag="Music 1" Click="Category_Click"/>
+        <Button x:Name="Music2Button" Grid.Column="3" Classes="top" Content="MUSIC2" Tag="Music 2" Click="Category_Click"/>
+        <Button Grid.Column="4" Classes="top" Content="STOP" Click="Stop_Click" Background="#FE2C95" BorderBrush="#FF72CB"/>
+        <ToggleButton x:Name="EditToggle" Grid.Column="5" Classes="top" Content="EDIT"/>
+      </Grid>
+
+      <Border Grid.Row="3"><Border.Background><LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%"><GradientStop Color="#FF2DAA" Offset="0"/><GradientStop Color="#25F4EE" Offset="1"/></LinearGradientBrush></Border.Background></Border>
+
+      <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8,10,3,4">
+        <ItemsControl x:Name="SoundItems">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate><DataTemplate x:DataType="local:SoundItem">
+            <Button Classes="sound" Content="{Binding Name}" Click="SoundButton_Click"/>
+          </DataTemplate></ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <Grid Grid.Row="5" Margin="5,0" ColumnDefinitions="*,Auto">
+        <TextBlock x:Name="StatusText" Text="Đang tải thư viện..." Foreground="#DDE5F4" FontSize="10" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="1" Text="SOVIA" Foreground="#25F4EE" FontSize="9" FontWeight="Bold" VerticalAlignment="Center"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>

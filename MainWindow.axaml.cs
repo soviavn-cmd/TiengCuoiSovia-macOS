@@ -1,0 +1,149 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
+
+namespace TiengCuoiSoviaMac;
+
+public partial class MainWindow : Window
+{
+    private static readonly string[] Categories = ["Effect 1", "Effect 2", "Music 1", "Music 2"];
+    private readonly ObservableCollection<SoundItem> _visible = [];
+    private readonly List<SoundItem> _all = [];
+    private readonly AudioService _audio = new();
+    private readonly SettingsService _settingsService = new();
+    private readonly AppSettings _settings;
+    private SoundItem? _current;
+    private string _category = "Effect 1";
+    private bool _editMode;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://TiengCuoiSovia/Assets/Sovia.ico")));
+        _settings = _settingsService.Load();
+        SoundItems.ItemsSource = _visible;
+        VolumeSlider.Value = _settings.Volume;
+        AlwaysOnTopToggle.IsChecked = _settings.AlwaysOnTop;
+        AlwaysOnTopToggle.IsCheckedChanged += AlwaysOnTop_Changed;
+        EditToggle.IsCheckedChanged += EditToggle_Changed;
+        Topmost = _settings.AlwaysOnTop;
+        _audio.Volume = _settings.Volume;
+        _audio.PlaybackFinished += (_, _) => ResetPlayer();
+        Opened += (_, _) => LoadSounds();
+        Closing += (_, _) => { _settingsService.Save(_settings); _audio.Dispose(); };
+    }
+
+    private void LoadSounds()
+    {
+        var root = Path.Combine(AppContext.BaseDirectory, "Media");
+        if (!Directory.Exists(root)) { StatusText.Text = "Không tìm thấy thư mục Media."; return; }
+        foreach (var category in Categories)
+        {
+            var folder = Path.Combine(root, category);
+            if (!Directory.Exists(folder)) continue;
+            foreach (var path in Directory.EnumerateFiles(folder, "*", SearchOption.TopDirectoryOnly)
+                         .Where(p => new[] { ".mp3", ".wav", ".m4a", ".aac" }.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
+                         .OrderBy(NaturalKey))
+            {
+                var id = Path.GetRelativePath(root, path).Replace('\\', '/');
+                var name = Regex.Replace(Path.GetFileNameWithoutExtension(path), @"^\d+\s+", "").Trim().ToUpperInvariant();
+                var sound = new SoundItem { Id = id, Category = category, Name = name, FilePath = path, OriginalName = name, OriginalFilePath = path };
+                if (_settings.SoundEdits.TryGetValue(id, out var edit))
+                {
+                    if (!string.IsNullOrWhiteSpace(edit.DisplayName)) sound.Name = edit.DisplayName;
+                    if (!string.IsNullOrWhiteSpace(edit.CustomFilePath) && File.Exists(edit.CustomFilePath)) sound.FilePath = edit.CustomFilePath;
+                }
+                _all.Add(sound);
+            }
+        }
+        RefreshCategory();
+    }
+
+    private static string NaturalKey(string path) => Regex.Replace(Path.GetFileName(path), @"^\d+", m => m.Value.PadLeft(5, '0'));
+
+    private void RefreshCategory()
+    {
+        _visible.Clear();
+        foreach (var item in _all.Where(x => x.Category == _category)) _visible.Add(item);
+        StatusText.Text = $"{_category}: {_visible.Count} hiệu ứng.";
+    }
+
+    private void Category_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button chosen || chosen.Tag is not string category) return;
+        _category = category;
+        foreach (var button in new[] { Effect1Button, Effect2Button, Music1Button, Music2Button })
+            button.Background = new SolidColorBrush(button == chosen ? Color.Parse("#FE2C95") : Color.Parse("#111529"));
+        RefreshCategory();
+    }
+
+    private async void SoundButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not SoundItem sound) return;
+        if (_editMode) await EditSoundAsync(sound); else PlaySound(sound);
+    }
+
+    private void PlaySound(SoundItem sound)
+    {
+        if (_current == sound && _audio.IsPlaying) { Stop(); return; }
+        try
+        {
+            if (_current is not null) _current.IsPlaying = false;
+            _audio.Play(sound.FilePath);
+            _current = sound;
+            sound.IsPlaying = true;
+            StatusText.Text = $"Đang phát: {sound.Name}";
+        }
+        catch (Exception ex) { ResetPlayer(); ShowError(ex.Message); }
+    }
+
+    private async Task EditSoundAsync(SoundItem sound)
+    {
+        if (_current == sound) Stop();
+        var dialog = new EditSoundDialog(sound.Name, Path.GetFileName(sound.FilePath), sound.Name != sound.OriginalName || sound.FilePath != sound.OriginalFilePath);
+        var result = await dialog.ShowDialog<EditResult?>(this);
+        if (result is null) return;
+        if (result.Restore)
+        {
+            sound.Name = sound.OriginalName; sound.FilePath = sound.OriginalFilePath; _settings.SoundEdits.Remove(sound.Id);
+            StatusText.Text = $"Đã khôi phục: {sound.Name}";
+        }
+        else
+        {
+            var name = string.IsNullOrWhiteSpace(result.Name) ? sound.OriginalName : result.Name.Trim().ToUpperInvariant();
+            var custom = _settings.SoundEdits.TryGetValue(sound.Id, out var old) ? old.CustomFilePath : null;
+            if (!string.IsNullOrWhiteSpace(result.SelectedPath))
+            {
+                Directory.CreateDirectory(_settingsService.CustomMediaFolder);
+                custom = Path.Combine(_settingsService.CustomMediaFolder, $"{Guid.NewGuid():N}{Path.GetExtension(result.SelectedPath)}");
+                File.Copy(result.SelectedPath, custom, true); sound.FilePath = custom;
+            }
+            sound.Name = name; _settings.SoundEdits[sound.Id] = new SoundEdit { DisplayName = name, CustomFilePath = custom };
+            StatusText.Text = $"Đã cập nhật: {sound.Name}";
+        }
+        _settingsService.Save(_settings);
+    }
+
+    private async void ShowError(string message)
+    {
+        var dialog = new Window { Title = "Tiếng Cười Sovia", Width = 380, Height = 150, CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = new SolidColorBrush(Color.Parse("#080B18")) };
+        var ok = new Button { Content = "OK", Width = 72, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+        ok.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel { Margin = new Thickness(20), Spacing = 18, Children = { new TextBlock { Text = message, Foreground = Brushes.White, TextWrapping = TextWrapping.Wrap }, ok } };
+        await dialog.ShowDialog(this);
+    }
+
+    private void Stop() { _audio.Stop(); ResetPlayer(); }
+    private void ResetPlayer() { if (_current is not null) _current.IsPlaying = false; _current = null; StatusText.Text = $"Đã tải {_all.Count} hiệu ứng từ Sovia."; }
+    private void Stop_Click(object? sender, RoutedEventArgs e) => Stop();
+    private void EditToggle_Changed(object? sender, RoutedEventArgs e) { _editMode = EditToggle.IsChecked == true; StatusText.Text = _editMode ? "EDIT: chọn nút để đổi tên hoặc file MP3." : $"Đã tải {_all.Count} hiệu ứng từ Sovia."; }
+    private void AlwaysOnTop_Changed(object? sender, RoutedEventArgs e) { Topmost = AlwaysOnTopToggle.IsChecked == true; _settings.AlwaysOnTop = Topmost; }
+    private void VolumeSlider_ValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e) { if (VolumeText is null) return; VolumeText.Text = $"{e.NewValue:0}"; _audio.Volume = e.NewValue; _settings.Volume = e.NewValue; }
+    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e) { if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e); }
+    private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+}
