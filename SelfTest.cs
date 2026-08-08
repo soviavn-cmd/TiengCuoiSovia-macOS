@@ -17,7 +17,9 @@ internal static class SelfTest
 
             foreach (var file in files)
             {
-                using var probe = Process.Start(new ProcessStartInfo("/usr/bin/afinfo", file) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true });
+                var probeInfo = new ProcessStartInfo("/usr/bin/afinfo") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+                probeInfo.ArgumentList.Add(file);
+                using var probe = Process.Start(probeInfo);
                 Assert(probe is not null, "Unable to start afinfo.");
                 await probe!.WaitForExitAsync();
                 Assert(probe.ExitCode == 0, $"CoreAudio rejected: {file}");
@@ -28,6 +30,9 @@ internal static class SelfTest
                 audio.Play(files.OrderByDescending(path => new FileInfo(path).Length).First());
                 await Task.Delay(700);
                 Assert(audio.IsPlaying, "afplay did not stay active during playback test.");
+                audio.Volume = 68;
+                await Task.Delay(150);
+                Assert(audio.IsPlaying, "Changing volume interrupted playback.");
                 audio.Stop();
                 Assert(!audio.IsPlaying, "STOP did not terminate playback.");
             }
@@ -45,7 +50,7 @@ internal static class SelfTest
             }
             finally { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
 
-            Console.WriteLine("SELF_TEST_PASS: 120 audio files, playback/stop, volume setting, always-on-top setting, and edit persistence.");
+            Console.WriteLine("SELF_TEST_PASS: 120 audio files, playback/stop, live volume, always-on-top setting, and edit persistence.");
             return 0;
         }
         catch (Exception ex)

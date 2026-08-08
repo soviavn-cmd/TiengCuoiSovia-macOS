@@ -41,6 +41,14 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o "$RUNNER_TEMP/publish"
 
+      - name: Build native macOS audio helper
+        run: |
+          swiftc native/SoviaAudioPlayer.swift \
+            -target "${{ matrix.arch == 'arm64' && 'arm64-apple-macosx11.0' || 'x86_64-apple-macosx11.0' }}" \
+            -swift-version 5 \
+            -framework AVFoundation \
+            -o "$RUNNER_TEMP/publish/SoviaAudioPlayer"
+
       - name: Create app bundle and icon
         shell: bash
         run: |
@@ -49,6 +57,7 @@ jobs:
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp -R "$RUNNER_TEMP/publish/." "$APP/Contents/MacOS/"
           chmod +x "$APP/Contents/MacOS/TiengCuoiSovia"
+          chmod +x "$APP/Contents/MacOS/SoviaAudioPlayer"
 
           ICONSET="$RUNNER_TEMP/Sovia.iconset"
           mkdir -p "$ICONSET"

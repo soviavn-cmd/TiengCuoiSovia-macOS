@@ -6,13 +6,13 @@ using Avalonia.Platform.Storage;
 
 namespace TiengCuoiSoviaMac;
 
-public sealed record EditResult(string Name, string? SelectedPath, bool Restore);
+public sealed record EditResult(string Name, IStorageFile? SelectedFile, bool Restore);
 
 public sealed class EditSoundDialog : Window
 {
     private readonly TextBox _name;
     private readonly TextBlock _file;
-    private string? _selectedPath;
+    private IStorageFile? _selectedFile;
 
     public EditSoundDialog(string currentName, string currentFile, bool canRestore)
     {
@@ -23,7 +23,7 @@ public sealed class EditSoundDialog : Window
         var browse = MakeButton("CHỌN MP3", "#25AABE"); browse.Click += Browse_Click;
         var restore = MakeButton("KHÔI PHỤC", "#2D3346"); restore.IsEnabled = canRestore; restore.Click += (_, _) => Close(new EditResult(currentName, null, true));
         var cancel = MakeButton("HỦY", "#2D3346"); cancel.Click += (_, _) => Close(null);
-        var save = MakeButton("LƯU", "#FE2C95"); save.Click += (_, _) => Close(new EditResult(_name.Text ?? "", _selectedPath, false));
+        var save = MakeButton("LƯU", "#FE2C95"); save.Click += (_, _) => Close(new EditResult(_name.Text ?? "", _selectedFile, false));
 
         var fileGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,105"), ColumnSpacing = 8 };
         fileGrid.Children.Add(new Border { Height = 38, Background = new SolidColorBrush(Color.Parse("#111529")), BorderBrush = new SolidColorBrush(Color.Parse("#495778")), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 0), Child = _file });
@@ -53,7 +53,7 @@ public sealed class EditSoundDialog : Window
             FileTypeFilter = [new FilePickerFileType("Tệp âm thanh") { Patterns = ["*.mp3", "*.wav", "*.m4a", "*.aac"] }]
         });
         if (files.Count == 0) return;
-        _selectedPath = files[0].TryGetLocalPath();
+        _selectedFile = files[0];
         _file.Text = files[0].Name; _file.Foreground = new SolidColorBrush(Color.Parse("#25F4EE"));
     }
 

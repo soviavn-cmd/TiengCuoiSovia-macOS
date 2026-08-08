@@ -7,31 +7,78 @@ namespace TiengCuoiSoviaMac;
 public sealed class AudioService : IDisposable
 {
     private Process? _player;
-    public double Volume { get; set; } = 75;
-    public bool IsPlaying => _player is { HasExited: false };
+    private double _volume = 75;
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            _volume = Math.Clamp(value, 0, 100);
+            var player = _player;
+            if (player is null) return;
+            try
+            {
+                if (!player.HasExited)
+                {
+                    player.StandardInput.WriteLine($"volume {_volume / 100d:0.000}".Replace(',', '.'));
+                    player.StandardInput.Flush();
+                }
+            }
+            catch { }
+        }
+    }
+    public bool IsPlaying
+    {
+        get { try { return _player is { HasExited: false }; } catch { return false; } }
+    }
     public event EventHandler? PlaybackFinished;
 
     public void Play(string path)
     {
         Stop();
         if (!OperatingSystem.IsMacOS())
-            throw new PlatformNotSupportedException("Bản này phát âm thanh bằng afplay của macOS.");
+            throw new PlatformNotSupportedException("Bản này sử dụng bộ phát âm thanh dành cho macOS.");
 
-        var info = new ProcessStartInfo("/usr/bin/afplay") { UseShellExecute = false, CreateNoWindow = true };
-        info.ArgumentList.Add("-v");
-        info.ArgumentList.Add(Math.Clamp(Volume / 100d, 0, 1).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+        var helper = Path.Combine(AppContext.BaseDirectory, "SoviaAudioPlayer");
+        if (!File.Exists(helper)) throw new FileNotFoundException("Thiếu bộ phát âm thanh SoviaAudioPlayer.", helper);
+        var info = new ProcessStartInfo(helper) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardError = true };
         info.ArgumentList.Add(path);
-        _player = new Process { StartInfo = info, EnableRaisingEvents = true };
-        _player.Exited += (_, _) => Dispatcher.UIThread.Post(() => PlaybackFinished?.Invoke(this, EventArgs.Empty));
-        _player.Start();
+        info.ArgumentList.Add((_volume / 100d).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture));
+        var player = new Process { StartInfo = info, EnableRaisingEvents = true };
+        player.Exited += (_, _) =>
+        {
+            if (!ReferenceEquals(Interlocked.CompareExchange(ref _player, null, player), player)) return;
+            player.Dispose();
+            Dispatcher.UIThread.Post(() => PlaybackFinished?.Invoke(this, EventArgs.Empty));
+        };
+        _player = player;
+        try
+        {
+            if (!player.Start()) throw new InvalidOperationException("Không thể khởi động bộ phát âm thanh.");
+        }
+        catch
+        {
+            Interlocked.CompareExchange(ref _player, null, player);
+            player.Dispose();
+            throw;
+        }
     }
 
     public void Stop()
     {
-        if (_player is null) return;
-        try { if (!_player.HasExited) _player.Kill(true); } catch { }
-        _player.Dispose();
-        _player = null;
+        var player = Interlocked.Exchange(ref _player, null);
+        if (player is null) return;
+        try
+        {
+            if (!player.HasExited)
+            {
+                player.StandardInput.WriteLine("stop");
+                player.StandardInput.Flush();
+                if (!player.WaitForExit(1000)) player.Kill(true);
+            }
+        }
+        catch { try { if (!player.HasExited) player.Kill(true); } catch { } }
+        finally { player.Dispose(); }
     }
 
     public void Dispose() => Stop();
@@ -56,6 +103,8 @@ public sealed class SettingsService
     {
         Directory.CreateDirectory(DataFolder);
         Directory.CreateDirectory(CustomMediaFolder);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(settings, _json));
+        var temporary = $"{FilePath}.tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(settings, _json));
+        File.Move(temporary, FilePath, true);
     }
 }

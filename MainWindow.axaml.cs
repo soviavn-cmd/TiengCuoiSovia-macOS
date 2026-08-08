@@ -110,6 +110,7 @@ public partial class MainWindow : Window
         if (result is null) return;
         if (result.Restore)
         {
+            if (_settings.SoundEdits.TryGetValue(sound.Id, out var previous)) DeleteCustomFile(previous.CustomFilePath);
             sound.Name = sound.OriginalName; sound.FilePath = sound.OriginalFilePath; _settings.SoundEdits.Remove(sound.Id);
             StatusText.Text = $"Đã khôi phục: {sound.Name}";
         }
@@ -117,16 +118,32 @@ public partial class MainWindow : Window
         {
             var name = string.IsNullOrWhiteSpace(result.Name) ? sound.OriginalName : result.Name.Trim().ToUpperInvariant();
             var custom = _settings.SoundEdits.TryGetValue(sound.Id, out var old) ? old.CustomFilePath : null;
-            if (!string.IsNullOrWhiteSpace(result.SelectedPath))
+            if (result.SelectedFile is not null)
             {
                 Directory.CreateDirectory(_settingsService.CustomMediaFolder);
-                custom = Path.Combine(_settingsService.CustomMediaFolder, $"{Guid.NewGuid():N}{Path.GetExtension(result.SelectedPath)}");
-                File.Copy(result.SelectedPath, custom, true); sound.FilePath = custom;
+                DeleteCustomFile(custom);
+                custom = Path.Combine(_settingsService.CustomMediaFolder, $"{Guid.NewGuid():N}{Path.GetExtension(result.SelectedFile.Name)}");
+                await using var input = await result.SelectedFile.OpenReadAsync();
+                await using var output = File.Create(custom);
+                await input.CopyToAsync(output);
+                sound.FilePath = custom;
             }
             sound.Name = name; _settings.SoundEdits[sound.Id] = new SoundEdit { DisplayName = name, CustomFilePath = custom };
             StatusText.Text = $"Đã cập nhật: {sound.Name}";
         }
         _settingsService.Save(_settings);
+    }
+
+    private void DeleteCustomFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var root = Path.GetFullPath(_settingsService.CustomMediaFolder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var candidate = Path.GetFullPath(path);
+            if (candidate.StartsWith(root, StringComparison.Ordinal) && File.Exists(candidate)) File.Delete(candidate);
+        }
+        catch { }
     }
 
     private async void ShowError(string message)
