@@ -17,6 +17,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+detach_volume() {
+  sync
+  for ATTEMPT in $(seq 1 10); do
+    if hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null; then return 0; fi
+    sleep 1
+  done
+  hdiutil detach "$MOUNT_POINT" -force -quiet
+}
+
 for ROUND in $(seq 1 "$REQUIRED_CLEAN_ROUNDS"); do
   rm -rf "$MOUNT_POINT"
   mkdir -p "$MOUNT_POINT"
@@ -66,7 +75,7 @@ for ROUND in $(seq 1 "$REQUIRED_CLEAN_ROUNDS"); do
   kill "$APP_PID" 2>/dev/null || true
   wait "$APP_PID" 2>/dev/null || true
   APP_PID=""
-  hdiutil detach "$MOUNT_POINT" -quiet
+  detach_volume
   echo "AUDIT_ROUND_PASS: $ROUND/$REQUIRED_CLEAN_ROUNDS"
 done
 
