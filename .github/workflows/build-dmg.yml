@@ -93,7 +93,13 @@ jobs:
           hdiutil create -volname "Tiếng Cười Sovia" -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
 
       - name: Test mounted DMG, app launch, and all audio files
-        run: bash scripts/test-macos-bundle.sh "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg"
+        run: bash scripts/test-macos-bundle.sh "TiengCuoiSovia-macOS-${{ matrix.arch }}.dmg" "macos-ui-${{ matrix.arch }}.png"
+
+      - name: Upload macOS UI test screenshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: UI-test-${{ matrix.arch }}
+          path: macos-ui-${{ matrix.arch }}.png
 
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v7
