@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DMG_PATH="${1:?Usage: test-macos-bundle.sh <dmg-path>}"
+DMG_PATH="${1:?Usage: test-macos-bundle.sh <dmg-path> [final-ui-screenshot]}"
+FINAL_SCREENSHOT="${2:-macos-ui-test.png}"
 EXPECTED_MEDIA=120
 MOUNT_POINT="${RUNNER_TEMP:-/tmp}/sovia-mount"
 APP="$MOUNT_POINT/Tieng Cuoi Sovia.app"
@@ -66,6 +67,16 @@ for ROUND in $(seq 1 "$REQUIRED_CLEAN_ROUNDS"); do
 
   "$APP/Contents/MacOS/TiengCuoiSovia" --self-test
 
+  UI_SCREENSHOT="${RUNNER_TEMP:-/tmp}/sovia-ui-round-${ROUND}.png"
+  rm -f "$UI_SCREENSHOT"
+  "$APP/Contents/MacOS/TiengCuoiSovia" --ui-self-test "$UI_SCREENSHOT"
+  test -s "$UI_SCREENSHOT"
+  [[ "$(sips -g pixelWidth "$UI_SCREENSHOT" | awk '/pixelWidth/ {print $2}')" == "342" ]]
+  [[ "$(sips -g pixelHeight "$UI_SCREENSHOT" | awk '/pixelHeight/ {print $2}')" == "680" ]]
+  if [[ "$ROUND" == "$REQUIRED_CLEAN_ROUNDS" ]]; then
+    cp "$UI_SCREENSHOT" "$FINAL_SCREENSHOT"
+  fi
+
   "$APP/Contents/MacOS/TiengCuoiSovia" >"$LOG_FILE" 2>&1 &
   APP_PID=$!
   sleep 3
@@ -81,4 +92,4 @@ for ROUND in $(seq 1 "$REQUIRED_CLEAN_ROUNDS"); do
   echo "AUDIT_ROUND_PASS: $ROUND/$REQUIRED_CLEAN_ROUNDS"
 done
 
-echo "PASS: 20 consecutive strict rounds; DMG mounted, app launched, features exercised, and all 120 audio files validated each round."
+echo "PASS: 20 consecutive strict rounds; DMG mounted, real UI rendered and exercised, app launched, and all 120 audio files validated each round."

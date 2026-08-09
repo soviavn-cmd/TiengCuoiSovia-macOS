@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 
@@ -76,6 +77,11 @@ public partial class MainWindow : Window
     private void Category_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button chosen || chosen.Tag is not string category) return;
+        SelectCategory(category, chosen);
+    }
+
+    private void SelectCategory(string category, Button chosen)
+    {
         _category = category;
         foreach (var button in new[] { Effect1Button, Effect2Button, Music1Button, Music2Button })
             button.Background = new SolidColorBrush(button == chosen ? Color.Parse("#FE2C95") : Color.Parse("#111529"));
@@ -167,7 +173,15 @@ public partial class MainWindow : Window
     {
         var width = Math.Max(1, VolumeHost.Bounds.Width);
         var value = Math.Clamp(e.GetPosition(VolumeHost).X / width * 100d, 0, 100);
-        _settings.Volume = value; _audio.Volume = value; VolumeText.Text = $"{value:0}"; UpdateVolumeVisual(value);
+        SetVolume(value);
+    }
+
+    private void SetVolume(double value)
+    {
+        value = Math.Clamp(value, 0, 100);
+        _settings.Volume = value;
+        _audio.Volume = value;
+        UpdateVolumeVisual(value);
     }
     private void UpdateVolumeVisual(double value)
     {
@@ -181,4 +195,66 @@ public partial class MainWindow : Window
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e) { if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginMoveDrag(e); }
     private void Minimize_Click(object? sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    internal async Task RunUiSelfTestAsync(string outputPath)
+    {
+        await Task.Delay(350);
+
+        static void Require(bool condition, string message)
+        {
+            if (!condition) throw new InvalidOperationException(message);
+        }
+
+        Require(Math.Abs(Bounds.Width - 342) < 0.5, $"Window width is {Bounds.Width}, expected 342.");
+        Require(Math.Abs(Bounds.Height - 680) < 0.5, $"Window height is {Bounds.Height}, expected 680.");
+        Require(_all.Count == 120, $"Loaded {_all.Count} sounds, expected 120.");
+
+        var buttons = new Dictionary<string, Button>
+        {
+            ["Effect 1"] = Effect1Button,
+            ["Effect 2"] = Effect2Button,
+            ["Music 1"] = Music1Button,
+            ["Music 2"] = Music2Button
+        };
+        foreach (var (category, button) in buttons)
+        {
+            SelectCategory(category, button);
+            Require(_visible.Count == 30, $"{category} contains {_visible.Count} buttons, expected 30.");
+            Require(_visible.All(item => item.Category == category), $"{category} shows an item from another category.");
+        }
+
+        var originalTopmost = Topmost;
+        var originalVolume = _settings.Volume;
+        AlwaysOnTopToggle.IsChecked = true;
+        Require(Topmost && _settings.AlwaysOnTop, "Always-on-top did not turn on.");
+        AlwaysOnTopToggle.IsChecked = false;
+        Require(!Topmost && !_settings.AlwaysOnTop, "Always-on-top did not turn off.");
+
+        EditToggle.IsChecked = true;
+        Require(_editMode, "Edit mode did not turn on.");
+        EditToggle.IsChecked = false;
+        Require(!_editMode, "Edit mode did not turn off.");
+
+        SetVolume(42);
+        Require(Math.Abs(_audio.Volume - 42) < 0.01, "Audio service volume was not updated.");
+        Require(VolumeText.Text == "42", $"Volume label is '{VolumeText.Text}', expected '42'.");
+        Require(VolumeFill.Width > 0 && VolumeFill.Width < VolumeHost.Bounds.Width, "Volume fill is outside the track.");
+
+        SelectCategory("Effect 1", Effect1Button);
+        await Task.Delay(150);
+
+        var directory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+        using (var bitmap = new RenderTargetBitmap(new PixelSize(342, 680), new Vector(96, 96)))
+        {
+            bitmap.Render(this);
+            bitmap.Save(outputPath, PngBitmapEncoderOptions.Default);
+        }
+        Require(File.Exists(outputPath) && new FileInfo(outputPath).Length > 0, "UI screenshot was not created.");
+
+        AlwaysOnTopToggle.IsChecked = originalTopmost;
+        SetVolume(originalVolume);
+        _settingsService.Save(_settings);
+        Console.WriteLine($"UI_SELF_TEST_PASS: 120 sounds, 4 categories, toggles, volume, layout, screenshot={outputPath}");
+    }
 }
